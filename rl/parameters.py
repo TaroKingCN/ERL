@@ -11,41 +11,22 @@ class Parameters:
         cla = cla.parse_args()
 
         # Set the device to run on CUDA or CPU
-        if not cla.disable_cuda and torch.cuda.is_available():
+        if  torch.cuda.is_available():
             self.device = torch.device('cuda')
         else:
             self.device = torch.device('cpfu')
 
-        # Render episodes
-        self.render = cla.render
-        self.env_name = cla.env
-        self.save_periodic = cla.save_periodic
-
-        self.num_frames = 10000
-
-        # Novelty Search
-        self.ns = cla.novelty
-        self.ns_epochs = 10
-
-        # DDPG params
+        # ddpg
         self.gamma = 0.99
         self.tau = 0.001
-        self.seed = cla.seed
+        self.seed = 114514
         self.batch_size = 128
-        self.frac_frames_train = 1.0
         self.use_done_mask = True
         self.buffer_size = 1000000
         self.ls = 128
-        self.episode = 1000
-        self.step = 10
+        self.episode = cla.episode
+        self.step = cla.step
 
-        # Prioritised Experience Replay
-        self.per = cla.per
-        self.replace_old = True
-        self.alpha = 0.7
-        self.beta_zero = 0.5
-        self.learn_start = (1 + self.buffer_size / self.batch_size) * 2
-        self.total_steps = self.num_frames
 
         # ========================================== NeuroEvolution Params =============================================
 
@@ -62,6 +43,9 @@ class Parameters:
         self.lb = None
         self.ub = None
         self.precision = None
+        self.summary_dir = cla.summary_dir
+        self.reward_formulation = cla.reward_formulation
+        self.workload = cla.workload
 
         if not os.path.exists(self.save_foldername):
             os.makedirs(self.save_foldername)
