@@ -7,7 +7,7 @@ import fastrand, math
 import torch
 import torch.distributions as dist
 from .mod_utils import is_lnorm_key
-from sko.parameters import Parameters
+from ERL.ArchERL.parameters import Parameters
 import os
 
 
@@ -252,7 +252,7 @@ class SSNE:
 
         batch = gene.buffer.sample(min(self.args.mutation_batch_size, len(gene.buffer)))
         state, _, _, _, _ = batch
-        output = model(state)
+        output = model(state, self.state_embedding_net)
 
         params = model.extract_parameters()
         tot_size = model.count_parameters()

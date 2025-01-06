@@ -29,7 +29,7 @@ class Parameters:
         elif cla.env == 'Ant-v2' or cla.env == 'Walker2d-v2' or cla.env == 'HalfCheetah-v2':
             self.num_frames = 6000000
         else:
-            self.num_frames = 20000
+            self.num_frames = 2000
 
         # Synchronization
         if cla.env == 'Hopper-v2' or cla.env == 'Ant-v2' or cla.env == 'Walker2d-v2':
@@ -85,11 +85,11 @@ class Parameters:
             self.elite_fraction = 0.1
 
         # Number of actors in the population
-        self.pop_size = 25
+        self.pop_size = 8
 
         # Mutation and crossover
-        self.crossover_prob = 0.0
-        self.mutation_prob = 0.9
+        self.crossover_prob = 0.1
+        self.mutation_prob = 0.1
         self.mutation_mag = cla.mut_mag
         self.mutation_noise = cla.mut_noise
         self.mutation_batch_size = 256
@@ -117,7 +117,11 @@ class Parameters:
         self.lb = None
         self.ub = None
         self.precision = None
-        self.reward_formulation = "power"
+        self.episode = cla.episode
+        self.step = cla.step
+        self.summary_dir = cla.summary_dir
+        self.reward_formulation = cla.reward_formulation
+        self.workload = cla.workload
 
         if not os.path.exists(self.save_foldername):
             os.makedirs(self.save_foldername)

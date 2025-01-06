@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.nn import functional as F
-from sko.parameters import Parameters
+from ERL.ArchERL.parameters import Parameters
 from . import replay_memory
 from .mod_utils import is_lnorm_key
 import numpy as np
@@ -32,17 +32,16 @@ class GeneticAgent:
 
     def update_parameters(self, batch, p1, p2, critic, state_embedding_net):
         state_batch, _, _, _, _ = batch
-        state_batch  = state_embedding_net(state_batch)
 
-        p1_action = p1(state_batch)
-        p2_action = p2(state_batch)
+        p1_action = p1(state_batch, state_embedding_net)
+        p2_action = p2(state_batch, state_embedding_net)
         p1_q = critic(state_batch, p1_action).flatten()
         p2_q = critic(state_batch, p2_action).flatten()
 
         eps = 0.0
         action_batch = torch.cat((p1_action[p1_q - p2_q > eps], p2_action[p2_q - p1_q >= eps])).detach()
         state_batch = torch.cat((state_batch[p1_q - p2_q > eps], state_batch[p2_q - p1_q >= eps]))
-        actor_action = self.actor(state_batch)
+        actor_action = self.actor(state_batch, state_embedding_net)
 
         # Actor Update
         self.actor_optim.zero_grad()
@@ -67,10 +66,11 @@ class shared_state_embedding(nn.Module):
         self.w_l1 = nn.Linear(args.state_dim, l1)
         # Hidden Layer 2
         self.w_l2 = nn.Linear(l1, l2)
-        self.relu = nn.Relu()
+        self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
         # Init
         self.to(self.args.device)
+        self.reset_params()
 
     def forward(self, state):
         # Hidden Layer 1
@@ -98,7 +98,7 @@ class Actor(nn.Module):
         l1 = args.ls; l2 = args.ls; l3 = l2
 
         # Construct Hidden Layer 1
-        self.w_l1 = nn.Linear(args.state_dim, l1)
+        self.w_l1 = nn.Linear(l1, l1)
         if self.args.use_ln: self.lnorm1 = LayerNorm(l1)
 
         # Hidden Layer 2
@@ -110,7 +110,7 @@ class Actor(nn.Module):
 
         # Activation
         self.sigmoid = nn.Sigmoid()
-        self.relu = nn.Relu()
+        self.relu = nn.ReLU()
 
         # Init
         if init:
@@ -118,6 +118,7 @@ class Actor(nn.Module):
             self.w_out.bias.data.mul_(0.1)
 
         self.to(self.args.device)
+        self.reset_params()
 
     def forward(self, input, state_embedding):
 
@@ -132,8 +133,16 @@ class Actor(nn.Module):
 
         # Out
         out = self.w_out(out)
-        out = self.sigmoidout
+        out = self.sigmoid(out)
         return out
+
+    def reset_params(self):
+        nn.init.xavier_normal_(self.w_l1.weight)
+        nn.init.constant_(self.w_l1.bias, 0.0)
+        nn.init.xavier_normal_(self.w_l2.weight)
+        nn.init.constant_(self.w_l2.bias, 0.0)
+        nn.init.xavier_normal_(self.w_out.weight)
+        nn.init.constant_(self.w_out.bias, 0.0)
 
     def select_action(self, state, state_embedding):
         state = torch.FloatTensor(state.reshape(1, -1)).to(self.args.device)
@@ -286,7 +295,7 @@ class DDPG(object):
         if self.args.use_done_mask: done_batch = done_batch.to(self.args.device)
 
         # Critic Update
-        next_action_batch = self.actor_target.forward(next_state_batch)
+        next_action_batch = self.actor_target.forward(next_state_batch, self.state_embedding_target)
         next_q = self.critic_target.forward(next_state_batch, next_action_batch)
         if self.args.use_done_mask: next_q = next_q * (1 - done_batch) #Done mask
         target_q = reward_batch + (self.gamma * next_q).detach()
@@ -302,7 +311,7 @@ class DDPG(object):
         # Actor Update
         self.actor_optim.zero_grad()
 
-        policy_grad_loss = -(self.critic.forward(state_batch, self.actor.forward(self.state_embedding.forward(state_batch)))).mean()
+        policy_grad_loss = -(self.critic.forward(state_batch, self.actor.forward(state_batch, self.state_embedding))).mean()
         policy_loss = policy_grad_loss
 
         policy_loss.backward()

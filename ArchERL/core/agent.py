@@ -1,5 +1,6 @@
-# PDERL
+# ARCHERL
 import numpy as np
+import pandas as pd
 from . import mod_neuro_evo as utils_ne
 # from . import mod_utils as utils
 # import replay_memory
@@ -13,8 +14,8 @@ import sys
 
 
 
-from .parameters import Parameters
-# from arch_gym.envs.envHelpers import helpers
+from ERL.ArchERL.parameters import Parameters
+from arch_gym.envs.envHelpers import helpers
 # import fastrand
 # import torch
 
@@ -70,13 +71,32 @@ class Agent:
         return np.floor(X)
 
 
+    def generate_run_directories(self):
+        # Construct the exp name from seed and num_iter
+        exp_name = str(self.args.workload) + "_step_" + str(self.args.step)
+        traject_dir = os.path.join(self.args.summary_dir, "arch_logs", self.args.reward_formulation, exp_name)
+        # log directories for storing exp csvs
+        exp_log_dir = os.path.join(self.args.summary_dir,"arch_logs",self.args.reward_formulation, exp_name)
+        if not os.path.exists(exp_log_dir):
+            os.makedirs(exp_log_dir)
+        return traject_dir, exp_log_dir
+
+    def log_fitness_to_csv(self, filename, fitness_dict):
+        df = pd.DataFrame([fitness_dict['reward']])
+        csvfile = os.path.join(filename, "fitness.csv")
+        df.to_csv(csvfile, index=False, header=False, mode='a')
+
+        # append to csv
+        df = pd.DataFrame([fitness_dict])
+        csvfile = os.path.join(filename, "trajectory.csv")
+        df.to_csv(csvfile, index=False, header=False, mode='a')
+
 
     def evaluate(self, agent: ddpg.GeneticAgent or ddpg.DDPG, state_embedding_net, is_render=False, is_action_noise=False,
-                 store_transition=True, net_index=None):
+                 store_transition=True, net_index=None, is_champion=False):
         total_reward = 0.0
         total_error = 0.0
-
-
+        fitness_dict = {}
         done = False
 
         while not done:
@@ -100,15 +120,22 @@ class Agent:
 
             # Simulate one step in environment
             _, reward, done, info = self.env.step(action_dict)
+            # save best result
+            if is_champion:
+                fitness_dict["action"] = action_dict
+                fitness_dict["reward"] = reward
+                fitness_dict["obs"] = info
+                # Convert dictionary to dataframe
+                fitness_df = pd.DataFrame([fitness_dict], columns=["action", "reward", "obs"])
+                traject_dir, exp_log_dir = self.generate_run_directories()
+                fitness_df.to_csv(os.path.join(exp_log_dir, "fitness.csv"), mode='a', header=False, index=False)
             total_reward += reward
-            print("================not done ddpg===============")
             transition = (state, action, action, reward, float(done))
             if store_transition:
                 self.replay_buffer.add(*transition)
                 agent.buffer.add(*transition)
 
             state = action
-        print("================done===============")
         if store_transition: self.num_games += 1
 
         return {'reward': total_reward, 'td_error': total_error}
@@ -139,11 +166,10 @@ class Agent:
         print("start to train ddpg")
         print("len of replay_buffer:" + str(len(self.replay_buffer)))
         print("self.args.batch_size: "+str(self.args.batch_size))
-        if len(self.replay_buffer) > self.args.batch_size * 5:
+        # if len(self.replay_buffer) > self.args.batch_size * 5:
+        if len(self.replay_buffer) > self.args.batch_size :
             for _ in range(int(self.gen_frames * self.args.frac_frames_train)):
                 batch = self.replay_buffer.sample(self.args.batch_size)
-                print(batch)
-
                 pgl, delta = self.rl_agent.update_parameters(batch)
                 pgs_loss.append(pgl)
         else:
@@ -154,7 +180,6 @@ class Agent:
     def train(self):
         self.gen_frames = 0
         self.iterations += 1
-
         # ========================== EVOLUTION  ==========================
         # Evaluate genomes/individuals
         rewards = np.zeros(len(self.pop))
@@ -178,14 +203,15 @@ class Agent:
         # Validation test for NeuroEvolution champion
         best_train_fitness = np.max(rewards)
         champion = self.pop[np.argmax(rewards)]
-
+        
         # print("Best TD Error:", np.max(errors))
 
         test_score = 0
         for eval in range(1):
             print(f'champion population')
-            episode = self.evaluate(champion, self.rl_agent.state_embedding, is_render=True, is_action_noise=False, store_transition=False)
+            episode = self.evaluate(champion, self.rl_agent.state_embedding, is_render=True, is_action_noise=False, store_transition=False, is_champion=True)
             test_score += episode['reward']
+
 
         # NeuroEvolution's probabilistic selection and recombination step
         elite_index = self.evolver.epoch(self.pop, all_fitness)

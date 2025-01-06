@@ -64,7 +64,7 @@ class ArchERL():
 
         next_save = parameters.next_save;
         time_start = time.time()
-        while agent.num_frames <= parameters.num_frames:
+        for i in range(parameters.episode):
             stats = agent.train()
             best_train_fitness = stats['best_train_fitness']
             erl_score = stats['test_score']
