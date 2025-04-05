@@ -11,10 +11,8 @@ from . import replay_memory
 import os
 import sys
 
-
-
-from sko.parameters import Parameters
-from arch_gym.envs.envHelpers import helpers
+from .parameters import Parameters
+# from arch_gym.envs.envHelpers import helpers
 # import fastrand
 # import torch
 
